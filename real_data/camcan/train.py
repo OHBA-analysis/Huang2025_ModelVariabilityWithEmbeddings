@@ -48,6 +48,7 @@ def load_data(data_dir, store_dir, use_tfrecord=True, buffer_size=2000, n_jobs=1
 
 
 def get_demographics():
+    """Get the demographics."""
     df = pd.DataFrame(columns=["data_path", "participant_id"])
     df["data_path"] = sorted(
         glob("/well/woolrich/projects/camcan/winter23/src/sub*/sflip_parc.npy")

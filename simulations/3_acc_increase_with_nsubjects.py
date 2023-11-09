@@ -17,6 +17,24 @@ tf_ops.gpu_growth()
 
 
 def build_and_train(hmm_config, sehmm_config, training_data):
+    """Build and train both models on the same data.
+
+    Parameters
+    ----------
+    hmm_config : osl_dynamics.models.hmm.Config
+        Configuration for the HMM model.
+    sehmm_config : osl_dynamics.models.sehmm.Config
+        Configuration for the SEHMM model.
+    training_data : osl_dynamics.data.Data
+        Training data.
+
+    Returns
+    -------
+    hmm_model : osl_dynamics.models.hmm.Model
+        Trained HMM model.
+    sehmm_model : osl_dynamics.models.sehmm.Model
+        Trained SEHMM model.
+    """
     # Build and train models
     hmm_model = hmm.Model(hmm_config)
     hmm_model.set_regularizers(training_data)
@@ -50,6 +68,26 @@ def build_and_train(hmm_config, sehmm_config, training_data):
 
 
 def get_acc(hmm_model, sehmm_model, sim, training_data):
+    """Get the accuracy of subject covariances.
+
+    Parameters
+    ----------
+    hmm_model : osl_dynamics.models.hmm.Model
+        Trained HMM model.
+    sehmm_model : osl_dynamics.models.sehmm.Model
+        Trained SE-HMM model.
+    sim : osl_dynamics.simulation.MSubj_HMM_MVN
+        Simulation object.
+    training_data : osl_dynamics.data.Data
+        Training data.
+
+    Returns
+    -------
+    hmm_acc : np.ndarray
+        Accuracy of subject covariances for the HMM model.
+    sehmm_acc : np.ndarray
+        Accuracy of subject covariances for the SEHMM model.
+    """
     # Get the orders of the modes
     sim_alp = np.concatenate(sim.mode_time_course)
     hmm_alp = hmm_model.get_alpha(training_data, concatenate=True)
@@ -81,6 +119,17 @@ def get_acc(hmm_model, sehmm_model, sim, training_data):
 
 
 def plot_results(hmm_dict, sehmm_dict, plot_dir):
+    """Plot the results.
+
+    Parameters
+    ----------
+    hmm_dict : dict
+        Dictionary of HMM results.
+    sehmm_dict : dict
+        Dictionary of SEHMM results.
+    plot_dir : str
+        Directory to save the plots.
+    """
     df = pd.DataFrame(
         columns=[
             "model",

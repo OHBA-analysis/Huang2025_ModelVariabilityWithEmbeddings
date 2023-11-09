@@ -23,6 +23,38 @@ def simulate_data(
     dev_state=0,
     dev_size=5,
 ):
+    """This function simulates data.
+
+    Parameters
+    ----------
+    n_states : int
+        Number of states.
+    n_channels : int
+        Number of channels.
+    n_samples : int
+        Number of samples per subject.
+    n_subjects : int
+        Number of subjects. Must be at least 3.
+    dev_state : int, optional
+        State with deviation, by default 0.
+    dev_size : int, optional
+        Deviation size, by default 5.
+
+    Returns
+    -------
+    time_series : list of array
+        List of data for each subject.
+        Each element has shape (n_samples, n_channels).
+    sim_subject_covs : np.ndarray
+        Simulated subject specific covariances.
+        Shape is (n_subjects, n_states, n_channels, n_channels).
+    stc : list of array
+        List of simulated state time courses for each subject.
+        Each element has shape (n_samples, n_states).
+    sim_group_covs : np.ndarray
+        Simulated group level covariances.
+        Shape is (n_states, n_channels, n_channels).
+    """
     if n_subjects < 3:
         raise ValueError("n_subjects must be at least 3")
 
@@ -90,6 +122,22 @@ def simulate_data(
 
 
 def get_prior_dev(model):
+    """Get the prior deviation from the generative model.
+
+    Here mean of the exponential distribution is used as
+    the deviation magnitude.
+
+    Parameters
+    ----------
+    model : sehmm.Model
+        SE-HMM model.
+
+    Returns
+    -------
+    prior_subject_devs : np.ndarray
+        Prior subject deviations.
+        Shape is (n_subjects, n_states, n_channels, n_channels).
+    """
     # Get the group covs
     group_covs = model.get_group_covariances()
 
