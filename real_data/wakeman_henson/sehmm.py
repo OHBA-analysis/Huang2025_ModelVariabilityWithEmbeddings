@@ -159,10 +159,11 @@ config = """
             learn_means: False
             learn_covariances: True
             subject_embeddings_dim: 3
+        n_jobs: 6
     multitaper_spectra:
         kwargs:
             frequency_range: [1, 45]
-            n_jobs: 16
+            n_jobs: 6
         nnmf_components: 2
     plot_loss: {}
     plot_embeddings: {}
