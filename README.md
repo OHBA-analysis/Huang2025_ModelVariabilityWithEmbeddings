@@ -3,9 +3,12 @@ This repository consists of scripts for reproducing results in the "Modelling su
 brain networks using embeddings" manuscript.
 
 ## Requirements
-Scripts in this repository depends on the [osl-dynamics](https://osl-dynamics.readthedocs.io) toolbox, which includes source code for the SE-HMM, SE-DyNeMo models, as well as analysis tools.
+- Scripts for preprocessing data depends on the [osl](https://github.com/OHBA-analysis/osl) toolbox. 
+- Scripts for training models and analysing results depends on the [osl-dynamics](https://osl-dynamics.readthedocs.io) toolbox, which includes source code for the SE-HMM, SE-DyNeMo models, as well as analysis tools.
 
 ## Contents
+```data_preprocessing```: This directory contains scripts for preprocessing, coregistration, source reconstruction and fixing sign ambiguity for the three MEG datasets used.
+
 ```simulations```: This directory contains scripts for simulation analysis on SE-HMM.
 - ```1_multivariate.py```: This script shows how multivariate information is captured in SE-HMM.
 - ```2_recover_structure.py```: This script shows how the underlying population structure is recovered by SE-HMM.
