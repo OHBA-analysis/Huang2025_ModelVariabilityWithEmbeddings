@@ -57,30 +57,36 @@ for model in ["hmm", "sehmm"]:
 
 # plot results
 plotting.plot_violin(
-    [
-        np.array(clustering_scores["sehmm"]["silhouette"]),
-        np.array(clustering_scores["hmm"]["silhouette"]),
-    ],
+    np.array(
+        [
+            clustering_scores["sehmm"]["silhouette"],
+            clustering_scores["hmm"]["silhouette"],
+        ]
+    ),
     ["SE-HMM", "HMM"],
     sns_kwargs={"cut": 0, "scale": "width"},
     filename=f"{base_dir}/silhouette_scores.png",
 )
 
 plotting.plot_violin(
-    [
-        np.array(clustering_scores["sehmm"]["davies_bouldin"]),
-        np.array(clustering_scores["hmm"]["davies_bouldin"]),
-    ],
+    np.array(
+        [
+            clustering_scores["sehmm"]["davies_bouldin"],
+            clustering_scores["hmm"]["davies_bouldin"],
+        ]
+    ),
     ["SE-HMM", "HMM"],
     sns_kwargs={"cut": 0, "scale": "width"},
     filename=f"{base_dir}/davies_bouldin_scores.png",
 )
 
 plotting.plot_violin(
-    [
-        np.array(clustering_scores["sehmm"]["calinski_harabasz"]),
-        np.array(clustering_scores["hmm"]["calinski_harabasz"]),
-    ],
+    np.array(
+        [
+            clustering_scores["sehmm"]["calinski_harabasz"],
+            clustering_scores["hmm"]["calinski_harabasz"],
+        ]
+    ),
     ["SE-HMM", "HMM"],
     sns_kwargs={"cut": 0, "scale": "width"},
     filename=f"{base_dir}/calinski_harabasz_scores.png",
