@@ -139,11 +139,11 @@ def plot_results(hmm_dict, sehmm_dict, plot_dir):
     )
     for n_subjects in n_subjects_list:
         acc_dict = {
-            "model": ["hmm", "sehmm"],
+            "model": ["HMM", "SE-HMM"],
             "n_subjects": [n_subjects] * 2,
             "subject_covs_acc": [
-                np.concatenate(hmm_dict[n_subjects]),
-                np.concatenate(sehmm_dict[n_subjects]),
+                np.concatenate(hmm_dict[n_subjects]).flatten(),
+                np.concatenate(sehmm_dict[n_subjects]).flatten(),
             ],
         }
         df = pd.concat([df, pd.DataFrame(acc_dict)], ignore_index=True)
@@ -151,27 +151,24 @@ def plot_results(hmm_dict, sehmm_dict, plot_dir):
     df = df.explode(["subject_covs_acc"])
     df["subject_covs_acc"] = df["subject_covs_acc"].astype(np.float32)
 
-    fig, axes = plt.subplots(1, 1, figsize=(10, 5))
-    sns.violinplot(
+    ax = sns.boxplot(
         data=df,
         x="n_subjects",
         y="subject_covs_acc",
         hue="model",
-        ax=axes,
-        split=True,
-        scale="count",
-        cut=0,
+        palette="colorblind",
+        linewidth=1,
+        showfliers=False,
+        medianprops={"color": "r", "linewidth": 2},
+        notch=True,
     )
-    axes.get_legend().remove()
-    axes.set_title("Accuracy of subject covariances", fontsize=25)
-    axes.set_xlabel("Number of subjects", fontsize=20)
-    axes.set_ylabel("Accuracy", fontsize=20)
-    axes.set_ylim(0, 1)
-    plt.yticks(fontsize=13)
-    plt.xticks(fontsize=13)
-    fig.legend(fontsize=15, loc="lower left")
-    fig.savefig(f"{plot_dir}/subject_covs_acc.png", dpi=300)
-    plt.close(fig)
+    ax.set_xlabel("Number of subjects", fontsize=20)
+    ax.set_ylabel("Accuracy", fontsize=20)
+    ax.tick_params(labelsize=15)
+    ax.legend()
+    sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+    # save figure
+    plt.savefig(f"{plot_dir}/acc_increase_with_nsubjects.png", dpi=300)
 
 
 train = True

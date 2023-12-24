@@ -156,7 +156,7 @@ def get_prior_dev(model):
 
     # Get the prior subject covs
     covs_layer = model.get_layer("subject_covs")
-    covs = covs_layer([group_covs, dev]).numpy()
+    covs = np.squeeze(covs_layer([group_covs, dev]).numpy())
 
     prior_subject_devs = covs - group_covs[None, ...]
     return prior_subject_devs
@@ -171,7 +171,7 @@ n_subjects = 10
 
 # Set output directory
 figures_dir = "figures/multivariate"
-model_dir = "models/multivariate"
+model_dir = "model/multivariate"
 
 os.makedirs(figures_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
@@ -224,19 +224,6 @@ sehmm_config = sehmm.Config(
 )
 
 if train:
-    # Initialize parameters with HMM
-    init_model = hmm.Model(hmm_config)
-    init_model.set_regularizers(training_data)
-    init_model.random_state_time_course_initialization(
-        training_data, n_epochs=3, n_init=5, take=1
-    )
-    _, init_dual_covs = init_model.dual_estimation(training_data)
-    init_dual_covs = np.reshape(init_dual_covs, (n_subjects, -1))
-    pca = PCA(n_components=sehmm_config.subject_embeddings_dim)
-
-    sehmm_config.initial_covariances = init_model.get_covariances()
-    sehmm_config.initial_trans_prob = init_model.get_trans_prob()
-
     # Build SE-HMM model
     model = sehmm.Model(sehmm_config)
     model.summary()
@@ -247,17 +234,14 @@ if train:
     # Set deviation initializer
     model.set_dev_parameters_initializer(training_data)
 
-    # Set subject embeddings initializer
-    model.set_subject_embeddings_initializer(pca.fit_transform(init_dual_covs))
-
-    # Initialize model with subject embeddings fixed
-    with model.set_trainable("subject_embeddings", False):
-        model.random_state_time_course_initialization(
-            training_data, n_epochs=5, n_init=10, take=1
-        )
+    # Initialisation
+    model.random_state_time_course_initialization(
+        training_data, n_epochs=5, n_init=10, take=1
+    )
 
     # Train model
     history = model.fit(training_data)
+
     model.save(model_dir)
     pickle.dump(history, open(f"{model_dir}/history.pkl", "wb"))
 else:
@@ -285,24 +269,24 @@ subject_embeddings = model.get_subject_embeddings()
 subject_embeddings -= np.mean(subject_embeddings, axis=0)
 subject_embeddings /= np.std(subject_embeddings, axis=0)
 
-plotting.plot_scatter(
+fig, ax = plotting.plot_scatter(
     [subject_embeddings[:, 0]],
     [subject_embeddings[:, 1]],
     annotate=[[str(i + 1) for i in range(n_subjects)]],
     title="Subject embeddings",
-    filename=f"{figures_dir}/subject_embeddings.png",
 )
+fig.savefig(f"{figures_dir}/subject_embeddings.png", dpi=300)
 
 # Plot simulated and inferred group covariances
 inf_group_covs = model.get_group_covariances()[order]
 plotting.plot_matrices(
     sim_group_covs,
-    main_title="Simulated group covariances",
+    titles=[f"State {i + 1}" for i in range(n_states)],
     filename=f"{figures_dir}/sim_group_covs.png",
 )
 plotting.plot_matrices(
     inf_group_covs,
-    main_title="Inferred group covariances",
+    titles=[f"State {i + 1}" for i in range(n_states)],
     filename=f"{figures_dir}/inf_group_covs.png",
 )
 
@@ -311,39 +295,25 @@ prior_subject_devs = get_prior_dev(model)[:, order]
 sim_subject_devs = sim_subject_covs - sim_group_covs[None, ...]
 
 # Plot simulated and inferred subject deviations
-vmin = np.min([sim_subject_devs, prior_subject_devs])
-vmax = np.max([sim_subject_devs, prior_subject_devs])
+vmin = np.min([sim_subject_devs[[0, 1, 2], 0], prior_subject_devs[[0, 1, 2], 0]])
+vmax = np.max([sim_subject_devs[[0, 1, 2], 0], prior_subject_devs[[0, 1, 2], 0]])
 
-fig, axes = plt.subplots(3, 5, figsize=(15, 9))
-for i in range(5):
-    axes[0, i].matshow(sim_subject_devs[0, i], cmap="viridis", vmin=vmin, vmax=vmax)
-    axes[1, i].matshow(sim_subject_devs[1, i], cmap="viridis", vmin=vmin, vmax=vmax)
-    axes[2, i].matshow(sim_subject_devs[2, i], cmap="viridis", vmin=vmin, vmax=vmax)
-
-axes[0, 0].set_ylabel("Subject 1", fontsize=16)
-axes[1, 0].set_ylabel("Subject 2", fontsize=16)
-axes[2, 0].set_ylabel("Other subjects", fontsize=16)
-for i in range(5):
-    axes[0, i].set_title(f"State {i}", fontsize=16)
-
-fig.tight_layout()
-fig.savefig(f"{figures_dir}/sim_covs_dev.png", dpi=300)
-plt.close(fig)
-
-fig, axes = plt.subplots(3, 5, figsize=(15, 9))
-for i in range(5):
-    axes[0, i].matshow(prior_subject_devs[0, i], cmap="viridis", vmin=vmin, vmax=vmax)
-    axes[1, i].matshow(prior_subject_devs[1, i], cmap="viridis", vmin=vmin, vmax=vmax)
-    axes[2, i].matshow(prior_subject_devs[2, i], cmap="viridis", vmin=vmin, vmax=vmax)
-
-axes[0, 0].set_ylabel("Subject 1", fontsize=16)
-axes[1, 0].set_ylabel("Subject 2", fontsize=16)
-axes[2, 0].set_ylabel("Other subjects", fontsize=16)
-for i in range(5):
-    axes[0, i].set_title(f"State {i}", fontsize=16)
-
-fig.tight_layout()
-fig.savefig(f"{figures_dir}/prior_covs_dev.png", dpi=300)
+fig, axes = plt.subplots(2, 3, figsize=(9, 6), squeeze=False)
+axes[0, 0].matshow(sim_subject_devs[0, 0], cmap="viridis", vmin=vmin, vmax=vmax)
+axes[0, 0].set_ylabel("Simulated", fontsize=16)
+axes[0, 0].set_title("Subject 1", fontsize=16)
+axes[0, 1].matshow(sim_subject_devs[1, 0], cmap="viridis", vmin=vmin, vmax=vmax)
+axes[0, 1].set_title("Subject 2", fontsize=16)
+axes[0, 2].matshow(sim_subject_devs[2, 0], cmap="viridis", vmin=vmin, vmax=vmax)
+axes[0, 2].set_title("Other subjects", fontsize=16)
+axes[1, 0].matshow(prior_subject_devs[0, 0], cmap="viridis", vmin=vmin, vmax=vmax)
+axes[1, 0].set_ylabel("Inferred", fontsize=16)
+axes[1, 1].matshow(prior_subject_devs[1, 0], cmap="viridis", vmin=vmin, vmax=vmax)
+im = axes[1, 2].matshow(prior_subject_devs[2, 0], cmap="viridis", vmin=vmin, vmax=vmax)
+fig.subplots_adjust(right=0.8)
+color_bar_axis = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+fig.colorbar(im, cax=color_bar_axis)
+fig.savefig(f"{figures_dir}/devs.png", dpi=300)
 plt.close(fig)
 
 # Clean up directory

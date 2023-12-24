@@ -1,7 +1,7 @@
 from sys import argv
 
 if len(argv) != 2:
-    print(f"Please pass the run id, e.g. python {argv[0]}.py 1")
+    print(f"Please pass the run id, e.g. python {argv[0]} 1")
     exit()
 id = argv[1]
 
@@ -24,6 +24,7 @@ from osl_dynamics.utils import plotting
 from osl_dynamics.utils.misc import load, override_dict_defaults
 
 tf_ops.gpu_growth()
+
 
 # Helper functions
 def match_subjects():
@@ -122,7 +123,7 @@ def match_subjects():
     return df
 
 
-def load_data(store_dir, use_tfrecord=True, buffer_size=2000, n_jobs=11):
+def load_data(store_dir, use_tfrecord=True, buffer_size=2000, n_jobs=16):
     """Load data."""
     df = match_subjects()
     training_data = Data(
@@ -401,7 +402,6 @@ def plot_dataset_networks_diff(
     # Load spectra
     f = load(f"{spectra_dir}/f.npy")
     psd = load(f"{spectra_dir}/psd.npy")
-    coh = load(f"{spectra_dir}/coh.npy")
 
     # Load the subject embeddings
     subject_embeddings = np.load(f"{inf_params_dir}/subject_embeddings.npy")
@@ -497,11 +497,10 @@ config = """
             kl_annealing_curve: tanh
             kl_annealing_sharpness: 10
             n_kl_annealing_epochs: 20
-        n_jobs: 6
     multitaper_spectra:
         kwargs:
             frequency_range: [1, 45]
-            n_jobs: 6
+            n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
     plot_subject_embeddings:

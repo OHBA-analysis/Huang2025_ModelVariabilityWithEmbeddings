@@ -4,7 +4,6 @@ import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
-from sklearn.decomposition import PCA
 
 from osl_dynamics import data, simulation
 from osl_dynamics.inference import tf_ops, metrics, modes
@@ -92,13 +91,16 @@ training_data = data.Data(
 
 # Build and train models
 if train_hmm:
-    print("Training HMM")
     hmm_model = hmm.Model(hmm_config)
     hmm_model.set_regularizers(training_data)
+    print("Training HMM")
+    # Initialisation
     hmm_model.random_state_time_course_initialization(
         training_data, n_init=5, n_epochs=3, take=1
     )
+    # Full training
     hmm_history = hmm_model.fit(training_data)
+
     pickle.dump(hmm_history, open(f"{model_dir}/hmm_history.pkl", "wb"))
     hmm_model.save(f"{model_dir}/hmm")
 else:
@@ -109,30 +111,19 @@ else:
 
 
 if train_sehmm:
-    init_model = hmm.Model(hmm_config)
-    init_model.set_regularizers(training_data)
-    init_model.random_state_time_course_initialization(
-        training_data, n_init=5, n_epochs=3, take=1
-    )
-
-    _, init_dual_covs = init_model.dual_estimation(training_data)
-    init_dual_covs = np.reshape(init_dual_covs, (sim.n_subjects, -1))
-    pca = PCA(n_components=sehmm_config.subject_embeddings_dim)
-
-    print("Training SE-HMM")
-    sehmm_config.initial_covariances = init_model.get_covariances()
-    sehmm_config.initial_trans_prob = init_model.get_trans_prob()
     sehmm_model = sehmm.Model(sehmm_config)
     sehmm_model.set_regularizers(training_data)
+    # Initialise deviation parameters
     sehmm_model.set_dev_parameters_initializer(training_data)
-    sehmm_model.set_subject_embeddings_initializer(pca.fit_transform(init_dual_covs))
-    with sehmm_model.set_trainable("subject_embeddings", False):
-        sehmm_model.random_state_time_course_initialization(
-            training_data,
-            n_init=10,
-            n_epochs=5,
-            take=1,
-        )
+    print("Training SE-HMM")
+    # Initialisation
+    sehmm_model.random_state_time_course_initialization(
+        training_data,
+        n_init=10,
+        n_epochs=5,
+        take=1,
+    )
+    # Full training
     sehmm_history = sehmm_model.fit(training_data)
 
     pickle.dump(sehmm_history, open(f"{model_dir}/sehmm_history.pkl", "wb"))

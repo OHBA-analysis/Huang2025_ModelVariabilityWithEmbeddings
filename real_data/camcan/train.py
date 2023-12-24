@@ -294,22 +294,14 @@ config = """
             learn_means: False
             learn_covariances: True
             subject_embeddings_dim: 3
-            batch_size: 64
-            n_epochs: 10
-            learning_rate: 0.001
-            do_kl_annealing: True
-            kl_annealing_curve: tanh
-            kl_annealing_sharpness: 10
-            n_kl_annealing_epochs: 5
-        n_jobs: 6
+            learning_rate: 0.0025
         init_kwargs:
             n_epochs: 1
-            take: 0.4
             n_init: 10
     multitaper_spectra:
         kwargs:
             frequency_range: [1, 45]
-            n_jobs: 6
+            n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
     plot_results:
@@ -330,7 +322,7 @@ output_dir = f"results/run{id}"
 tmp_dir = f"tmp/run{id}"
 data_dir = "/well/woolrich/projects/camcan/winter23/src"
 
-training_data = load_data(data_dir, tmp_dir, n_jobs=6)
+training_data = load_data(data_dir, tmp_dir, n_jobs=16)
 run_pipeline(
     config,
     output_dir=output_dir,

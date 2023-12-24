@@ -159,11 +159,10 @@ config = """
             learn_means: False
             learn_covariances: True
             subject_embeddings_dim: 3
-        n_jobs: 6
     multitaper_spectra:
         kwargs:
             frequency_range: [1, 45]
-            n_jobs: 6
+            n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
     plot_embeddings: {}
@@ -179,7 +178,7 @@ config = """
         sns_kwargs:
             cut: 0
 """
-training_data = load_data(data_dir, tmp_dir, n_jobs=6)
+training_data = load_data(data_dir, tmp_dir, n_jobs=16)
 run_pipeline(
     config,
     output_dir=output_dir,

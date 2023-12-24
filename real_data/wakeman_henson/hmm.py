@@ -71,11 +71,11 @@ config = """
             learn_means: False
             learn_covariances: True
     dual_estimation:
-        n_jobs: 6
+        n_jobs: 16
     multitaper_spectra:
         kwargs:
             frequency_range: [1, 45]
-            n_jobs: 6
+            n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
     plot_alpha:
@@ -89,7 +89,7 @@ config = """
     plot_hmm_network_summary_stats: {}
 """
 
-training_data = load_data(data_dir, tmp_dir, n_jobs=6)
+training_data = load_data(data_dir, tmp_dir, n_jobs=16)
 run_pipeline(
     config,
     output_dir=output_dir,
