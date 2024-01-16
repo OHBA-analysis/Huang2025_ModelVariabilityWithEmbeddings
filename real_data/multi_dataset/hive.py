@@ -15,10 +15,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
+from scipy.spatial.distance import pdist, squareform
 
 from osl_dynamics import run_pipeline
 from osl_dynamics.data import Data
-from osl_dynamics.inference import tf_ops, metrics
+from osl_dynamics.inference import tf_ops
 from osl_dynamics.analysis import power
 from osl_dynamics.utils import plotting
 from osl_dynamics.utils.misc import load, override_dict_defaults
@@ -66,7 +67,6 @@ def match_subjects():
     camcan_demo["age_range"] = pd.cut(
         camcan_demo["age"], bins, right=False, labels=labels
     )
-    camcan_groups = camcan_demo.groupby(["age_range", "sex"]).size()
 
     # Match the demographics (Cam-CAN has more subjects than notts in all groups)
     camcan_matched_subjects = []
@@ -162,152 +162,22 @@ def plot_loss(data, output_dir):
     )
 
 
-def plot_subject_embeddings(data, output_dir, view_init_kwargs=None):
-    """Plot the subject embeddings."""
-
-    if view_init_kwargs is None:
-        view_init_kwargs = {"elev": 10, "azim": 0}
+def plot_embeddings(data, output_dir):
+    """Plot the embeddings."""
 
     # Directories
     inf_params_dir = f"{output_dir}/inf_params"
-    plot_dir = f"{output_dir}/subject_embeddings"
+    plot_dir = f"{output_dir}/embeddings"
     os.makedirs(plot_dir, exist_ok=True)
 
-    subject_embeddings = np.load(f"{inf_params_dir}/subject_embeddings.npy")
-    subject_embeddings -= subject_embeddings.mean(axis=0)
-    subject_embeddings /= subject_embeddings.std(axis=0)
-    covs = np.load(f"{inf_params_dir}/covs.npy")
+    embeddings = load(f"{inf_params_dir}/embeddings.npy")
+    embeddings -= embeddings.mean(axis=0)
+    embeddings /= embeddings.std(axis=0)
 
-    # Pairwise L2 distances of covariances and subject embeddings
-    covs_pw_l2 = metrics.pairwise_l2_distance(
-        np.transpose(covs, (1, 0, 2, 3)), batch_dims=1
-    )
-    se_pw_l2 = metrics.pairwise_l2_distance(subject_embeddings)
-
-    # Plot the pairwise L2 distances of covariances vs subject embeddings
-    m, n = np.tril_indices(len(covs), k=-1)
-    plotting.plot_scatter(
-        [se_pw_l2[m, n]] * covs.shape[1],
-        covs_pw_l2[:, m, n],
-        labels=[f"state {i + 1}" for i in range(covs.shape[1])],
-        x_label="Subject embeddings",
-        y_label="Covariances",
-        filename=f"{plot_dir}/pw_l2_se_vs_covs.png",
-    )
-
-    # Plot the pairwise L2 distances of covariances
-    plotting.plot_matrices(
-        covs_pw_l2,
-        filename=f"{plot_dir}/covs_l2.png",
-    )
-
-    # Pairwise correlation between covariances and subject embeddings
-    covs_pw_corr = np.zeros((covs.shape[1], covs.shape[0], covs.shape[0]))
-    for i in range(covs.shape[1]):
-        covs_pw_corr[i] = metrics.pairwise_matrix_correlations(covs[:, i])
-
-    se_corr = np.corrcoef(subject_embeddings)
-
-    plotting.plot_matrices(
-        covs_pw_corr,
-        filename=f"{plot_dir}/covs_corr.png",
-    )
-
-    df = match_subjects()
-
-    # Normalise and PCA
-    pca = PCA(n_components=2)
-    pca_subject_embeddings = pca.fit_transform(subject_embeddings)
-
-    # Get the centroids of the clusters
-    centroids = np.array(
-        [
-            np.mean(subject_embeddings[df["dataset"] == "notts"], axis=0),
-            np.mean(subject_embeddings[df["dataset"] == "camcan"], axis=0),
-        ]
-    )
-    pca_centroids = pca.transform(centroids)
-
-    # 3D plot
-    sns.set_palette("colorblind", n_colors=2)
-    fig = plt.figure(figsize=(5, 5))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.view_init(**view_init_kwargs)
-    ax.scatter(
-        subject_embeddings[df["dataset"] == "notts", 0],
-        subject_embeddings[df["dataset"] == "notts", 1],
-        subject_embeddings[df["dataset"] == "notts", 2],
-        label="Nottingham",
-    )
-    ax.scatter(
-        subject_embeddings[df["dataset"] == "camcan", 0],
-        subject_embeddings[df["dataset"] == "camcan", 1],
-        subject_embeddings[df["dataset"] == "camcan", 2],
-        label="Cam-CAN",
-    )
-    ax.plot(
-        centroids[0][0],
-        centroids[0][1],
-        centroids[0][2],
-        color="black",
-        marker="*",
-        markersize=15,
-    )
-    ax.plot(
-        centroids[1][0],
-        centroids[1][1],
-        centroids[1][2],
-        color="black",
-        marker="*",
-        markersize=15,
-    )
-    ax.legend()
-    fig.savefig(f"{plot_dir}/se_3d.png")
-    plt.close()
-    sns.reset_defaults()
-
-    sns.set_palette("viridis", n_colors=8)
-    fig = plt.figure(figsize=(5, 5))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.view_init(**view_init_kwargs)
-    for age_range in [
-        "18-24",
-        "24-30",
-        "30-36",
-        "36-42",
-        "42-48",
-        "48-54",
-        "54-60",
-        "60+",
-    ]:
-        ax.scatter(
-            subject_embeddings[df.age_range == age_range, 0],
-            subject_embeddings[df.age_range == age_range, 1],
-            subject_embeddings[df.age_range == age_range, 2],
-            label=age_range,
-        )
-
-    ax.legend()
-    fig.savefig(f"{plot_dir}/se_3d_age.png")
-    plt.close()
-    sns.reset_defaults()
-
-    # Plot the pairwise corr and L2 distances of subject embeddings
+    se_cosine = squareform(pdist(embeddings, metric="cosine"))
     fig, ax = plotting.plot_matrices(
-        se_corr,
-    )
-    ax[0][0].set_xticks(
-        ticks=[64 // 2, 64, 64 + 64 // 2], labels=["notts", "", "CamCAN"]
-    )
-    ax[0][0].set_yticks(
-        ticks=[64 // 2, 64, 64 + 64 // 2], labels=["notts", "", "CamCAN"]
-    )
-    plt.setp(ax[0][0].get_yticklabels(), rotation=90)
-    fig.savefig(f"{plot_dir}/se_corr.png")
-    plt.close()
-
-    fig, ax = plotting.plot_matrices(
-        se_pw_l2,
+        se_cosine,
+        cmap="coolwarm",
     )
     ax[0][0].set_xticks(
         ticks=[64 // 2, 64, 64 + 64 // 2],
@@ -320,20 +190,35 @@ def plot_subject_embeddings(data, output_dir, view_init_kwargs=None):
         fontsize=15,
     )
     plt.setp(ax[0][0].get_yticklabels(), rotation=90, va="center")
-    fig.savefig(f"{plot_dir}/se_l2.png")
-    plt.close()
+    fig.savefig(f"{plot_dir}/se_cos.png")
+    plt.close(fig)
+
+    df = match_subjects()
+
+    # Normalise and PCA
+    pca = PCA(n_components=2)
+    pca_embeddings = pca.fit_transform(embeddings)
+
+    # Get the centroids of the clusters
+    centroids = np.array(
+        [
+            np.mean(embeddings[df["dataset"] == "notts"], axis=0),
+            np.mean(embeddings[df["dataset"] == "camcan"], axis=0),
+        ]
+    )
+    pca_centroids = pca.transform(centroids)
 
     # 2D plot
     sns.set_palette("colorblind", n_colors=2)
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(5, 3))
     ax.scatter(
-        pca_subject_embeddings[df["dataset"] == "notts", 0],
-        pca_subject_embeddings[df["dataset"] == "notts", 1],
+        pca_embeddings[df["dataset"] == "notts", 0],
+        pca_embeddings[df["dataset"] == "notts", 1],
         label="Nottingham",
     )
     ax.scatter(
-        pca_subject_embeddings[df["dataset"] == "camcan", 0],
-        pca_subject_embeddings[df["dataset"] == "camcan", 1],
+        pca_embeddings[df["dataset"] == "camcan", 0],
+        pca_embeddings[df["dataset"] == "camcan", 1],
         label="Cam-CAN",
     )
     ax.scatter(
@@ -344,11 +229,12 @@ def plot_subject_embeddings(data, output_dir, view_init_kwargs=None):
         s=100,
     )
     ax.legend()
-    fig.savefig(f"{plot_dir}/se_2d.png")
+    fig.tight_layout()
+    fig.savefig(f"{plot_dir}/se_2d.png", dpi=300)
     plt.close()
 
     sns.set_palette("viridis", n_colors=8)
-    fig, ax = plt.subplots(figsize=(5, 5))
+    fig, ax = plt.subplots(figsize=(5, 3))
     for age_range in [
         "18-24",
         "24-30",
@@ -360,13 +246,15 @@ def plot_subject_embeddings(data, output_dir, view_init_kwargs=None):
         "60+",
     ]:
         ax.scatter(
-            pca_subject_embeddings[df.age_range == age_range, 0],
-            pca_subject_embeddings[df.age_range == age_range, 1],
+            pca_embeddings[df.age_range == age_range, 0],
+            pca_embeddings[df.age_range == age_range, 1],
             label=age_range,
         )
     ax.legend()
-    fig.savefig(f"{plot_dir}/se_2d_age.png")
+    fig.tight_layout()
+    fig.savefig(f"{plot_dir}/se_2d_age.png", dpi=300)
     plt.close()
+    sns.reset_defaults()
 
 
 def plot_dataset_networks_diff(
@@ -404,29 +292,29 @@ def plot_dataset_networks_diff(
     psd = load(f"{spectra_dir}/psd.npy")
 
     # Load the subject embeddings
-    subject_embeddings = np.load(f"{inf_params_dir}/subject_embeddings.npy")
+    embeddings = np.load(f"{inf_params_dir}/embeddings.npy")
     df = match_subjects()
 
     # Normalise and PCA
-    subject_embeddings -= subject_embeddings.mean(axis=0)
-    subject_embeddings /= subject_embeddings.std(axis=0)
+    embeddings -= embeddings.mean(axis=0)
+    embeddings /= embeddings.std(axis=0)
 
     # Get the centroids of the clusters
     centroids = np.array(
         [
-            np.mean(subject_embeddings[df["dataset"] == "notts"], axis=0),
-            np.mean(subject_embeddings[df["dataset"] == "camcan"], axis=0),
+            np.mean(embeddings[df["dataset"] == "notts"], axis=0),
+            np.mean(embeddings[df["dataset"] == "camcan"], axis=0),
         ]
     )
 
     # Get the nearest neighbours of the centroids
     notts_neighbours = _get_nearest_neighbours(
-        candidates=subject_embeddings,
+        candidates=embeddings,
         target=centroids[0],
         n_neighbours=10,
     )
     camcan_neighbours = _get_nearest_neighbours(
-        candidates=subject_embeddings,
+        candidates=embeddings,
         target=centroids[1],
         n_neighbours=10,
     )
@@ -460,38 +348,34 @@ def plot_dataset_networks_diff(
     P_camcan = cluster_gpsd[1]
 
     P_notts_minus_camcan = P_notts - P_camcan
-    P_max = np.max(P_notts_minus_camcan)
-    P_min = np.min(P_notts_minus_camcan)
-    sns.set_palette("viridis", P_notts_minus_camcan.shape[1])
-
+    P_mean = np.mean(P_notts_minus_camcan, axis=1)
+    P_std = np.std(P_notts_minus_camcan, axis=1)
     for j in range(P_notts_minus_camcan.shape[0]):
         fig, ax = plotting.plot_line(
-            [f] * P_notts_minus_camcan.shape[1],
-            P_notts_minus_camcan[j],
+            [f],
+            [P_mean[j]],
+            errors=[[P_mean[j] + P_std[j]], [P_mean[j] - P_std[j]]],
             x_range=[0, 45],
-            y_range=[P_min, P_max],
-            y_label="PSD (a.u.)",
+            y_range=[-0.03, 0.02],
         )
-        ax.plot(f, np.mean(P_notts_minus_camcan[j], axis=0), color="red")
-        ax.axhline(0, color="black", linestyle="--")
+        ax.axhline(0, color="k", linestyle="--")
         ax.set_xticklabels(ax.get_xticks(), fontsize=15)
+        ax.set_yticklabels(ax.get_yticks().round(2), fontsize=15)
         fig.savefig(f"{plot_dir}/psd_{j}.png", dpi=300)
         plt.close(fig)
 
-    sns.reset_defaults()
-
 
 # Set directories
-output_dir = f"results/run{id}"
-tmp_dir = f"tmp/run{id}"
+output_dir = f"results/hive/run{id}"
+tmp_dir = f"tmp/hive/run{id}"
 
 config = """
-    train_sehmm:
+    train_hive:
         config_kwargs:
             n_states: 6
             learn_means: False
             learn_covariances: True
-            subject_embeddings_dim: 3
+            embeddings_dim: 20
             n_epochs: 40
             do_kl_annealing: True
             kl_annealing_curve: tanh
@@ -503,8 +387,7 @@ config = """
             n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
-    plot_subject_embeddings:
-        view_init_kwargs: {elev: 10, azim: 70}
+    plot_embeddings: {}
     plot_alpha:
         kwargs: {n_samples: 2000}
     plot_group_nnmf_tde_hmm_networks:
@@ -526,5 +409,5 @@ run_pipeline(
     config,
     output_dir=output_dir,
     data=training_data,
-    extra_funcs=[plot_loss, plot_subject_embeddings, plot_dataset_networks_diff],
+    extra_funcs=[plot_loss, plot_embeddings, plot_dataset_networks_diff],
 )

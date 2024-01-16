@@ -5,17 +5,22 @@ if len(argv) != 2:
     exit()
 id = argv[1]
 
+import os
 from glob import glob
 
-import pickle
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.spatial.distance import pdist, squareform
 
 from osl_dynamics import run_pipeline
 from osl_dynamics.data import Data
 from osl_dynamics.inference import tf_ops
 from osl_dynamics.utils import plotting
+from osl_dynamics.utils.misc import load
 
 # GPU settings
 tf_ops.gpu_growth()
+
 
 # Helper functions
 def load_data(data_dir, store_dir, use_tfrecord=True, buffer_size=2000, n_jobs=16):
@@ -48,7 +53,7 @@ def plot_loss(data, output_dir):
     model_dir = f"{output_dir}/model"
     plot_dir = output_dir
 
-    history = pickle.load(open(f"{model_dir}/history.pkl", "rb"))
+    history = load(f"{model_dir}/history.pkl")
     plotting.plot_line(
         [range(1, len(history["loss"]) + 1)],
         [history["loss"]],
@@ -59,25 +64,53 @@ def plot_loss(data, output_dir):
     )
 
 
+def plot_embeddings(data, output_dir):
+    """Plot the embeddings related plots."""
+
+    # Directories
+    inf_params_dir = f"{output_dir}/inf_params"
+    plot_dir = f"{output_dir}/embeddings"
+    os.makedirs(plot_dir, exist_ok=True)
+
+    embeddings = load(f"{inf_params_dir}/embeddings.npy")
+    embeddings -= np.mean(embeddings, axis=0, keepdims=True)
+    embeddings /= np.std(embeddings, axis=0, keepdims=True)
+
+    # Pairwise correlation between subject embeddings
+    se_cosine = squareform(pdist(embeddings, metric="cosine"))
+    fig, ax = plotting.plot_matrices(
+        se_cosine,
+        cmap="coolwarm",
+    )
+    ax[0][0].set_xticks(
+        ticks=np.arange(0, 114, 6) + 3, labels=[f"{i + 1}" for i in range(19)]
+    )
+    ax[0][0].set_yticks(
+        ticks=np.arange(0, 114, 6) + 3, labels=[f"{i + 1}" for i in range(19)]
+    )
+    fig.savefig(f"{plot_dir}/se_cos.png")
+    plt.close(fig)
+
+
 # Set directories
-output_dir = f"results/hmm/run{id}"
-tmp_dir = f"tmp/hmm/run{id}"
+output_dir = f"results/hive/run{id}"
+tmp_dir = f"tmp/hive/run{id}"
 data_dir = "/well/woolrich/projects/wakeman_henson/spring23/src"
 
 config = """
-    train_hmm:
+    train_hive:
         config_kwargs:
             n_states: 6
             learn_means: False
             learn_covariances: True
-    dual_estimation:
-        n_jobs: 16
+            embeddings_dim: 10
     multitaper_spectra:
         kwargs:
             frequency_range: [1, 45]
             n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
+    plot_embeddings: {}
     plot_alpha:
         kwargs: {n_samples: 2000}
     plot_group_nnmf_tde_hmm_networks:
@@ -86,13 +119,14 @@ config = """
         parcellation_file: fmri_d100_parcellation_with_PCC_reduced_2mm_ss5mm_ds8mm.nii.gz
         power_save_kwargs:
             plot_kwargs: {views: [lateral]}
-    plot_hmm_network_summary_stats: {}
+    plot_hmm_network_summary_stats:
+        sns_kwargs:
+            cut: 0
 """
-
 training_data = load_data(data_dir, tmp_dir, n_jobs=16)
 run_pipeline(
     config,
     output_dir=output_dir,
     data=training_data,
-    extra_funcs=[plot_loss],
+    extra_funcs=[plot_loss, plot_embeddings],
 )

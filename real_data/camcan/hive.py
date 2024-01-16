@@ -26,7 +26,7 @@ from osl_dynamics.utils.misc import load, override_dict_defaults
 tf_ops.gpu_growth()
 
 
-def load_data(data_dir, store_dir, use_tfrecord=True, buffer_size=2000, n_jobs=1):
+def load_data(data_dir, store_dir, use_tfrecord=True, buffer_size=2000, n_jobs=16):
     """Load the data."""
 
     data_paths = sorted(glob(f"{data_dir}/sub*/sflip_parc.npy"))
@@ -106,7 +106,7 @@ def plot_loss(data, output_dir):
     )
 
 
-def plot_results(data, output_dir, view_init_kwargs=None):
+def plot_results(data, output_dir):
     """Plot the subject embeddings."""
 
     def _get_nearest_neighbours(candidates, target, n_neighbours):
@@ -114,21 +114,18 @@ def plot_results(data, output_dir, view_init_kwargs=None):
         distances = np.linalg.norm(target[None, ...] - candidates, axis=1)
         return np.argsort(distances)[:n_neighbours]
 
-    if view_init_kwargs is None:
-        view_init_kwargs = {"elev": 10, "azim": 0}
-
     # Directories
     inf_params_dir = f"{output_dir}/inf_params"
-    se_dir = f"{output_dir}/subject_embeddings"
+    se_dir = f"{output_dir}/embeddings"
     spectra_dir = f"{output_dir}/spectra"
     net_diff_dir = f"{output_dir}/networks_diff"
 
     os.makedirs(se_dir, exist_ok=True)
     os.makedirs(net_diff_dir, exist_ok=True)
 
-    subject_embeddings = np.load(f"{inf_params_dir}/subject_embeddings.npy")
-    subject_embeddings -= subject_embeddings.mean(axis=0)
-    subject_embeddings /= subject_embeddings.std(axis=0)
+    embeddings = np.load(f"{inf_params_dir}/embeddings.npy")
+    embeddings -= embeddings.mean(axis=0)
+    embeddings /= embeddings.std(axis=0)
     df = get_demographics()
 
     # Age categories
@@ -147,16 +144,12 @@ def plot_results(data, output_dir, view_init_kwargs=None):
         "84+",
     ]
     # Young and old centroids
-    young_centroid = np.mean(
-        subject_embeddings[df.age_range.isin(categories[:3])], axis=0
-    )
-    old_centroid = np.mean(
-        subject_embeddings[df.age_range.isin(categories[-3:])], axis=0
-    )
+    young_centroid = np.mean(embeddings[df.age_range.isin(categories[:3])], axis=0)
+    old_centroid = np.mean(embeddings[df.age_range.isin(categories[-3:])], axis=0)
 
     # PCA
     pca = PCA(n_components=2)
-    pca_subject_embeddings = pca.fit_transform(subject_embeddings)
+    pca_subject_embeddings = pca.fit_transform(embeddings)
     pca_young_centroid = np.squeeze(pca.transform(young_centroid.reshape(1, -1)))
     pca_old_centroid = np.squeeze(pca.transform(old_centroid.reshape(1, -1)))
 
@@ -189,41 +182,6 @@ def plot_results(data, output_dir, view_init_kwargs=None):
     fig.savefig(f"{se_dir}/2d_se.png")
     plt.close()
 
-    # 3D plot
-    sns.set_palette("viridis", n_colors=len(categories))
-    fig = plt.figure(figsize=(5, 5))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.view_init(**view_init_kwargs)
-    for cat in categories:
-        idx = df.age_range == cat
-        ax.scatter(
-            subject_embeddings[idx, 0],
-            subject_embeddings[idx, 1],
-            subject_embeddings[idx, 2],
-            label=cat,
-        )
-    ax.legend()
-    plt.tight_layout()
-    fig.savefig(f"{se_dir}/3d_se.png")
-    plt.close()
-
-    sns.set_palette("colorblind")
-    fig = plt.figure(figsize=(5, 5))
-    ax = fig.add_subplot(111, projection="3d")
-    ax.view_init(**view_init_kwargs)
-    for sex in ["MALE", "FEMALE"]:
-        idx = df.sex == sex
-        ax.scatter(
-            subject_embeddings[idx, 0],
-            subject_embeddings[idx, 1],
-            subject_embeddings[idx, 2],
-            label=sex,
-        )
-    ax.legend()
-    plt.tight_layout()
-    fig.savefig(f"{se_dir}/3d_se_sex.png")
-    plt.close()
-
     # Load the NNMF components
     nnmf_file = "spectra/nnmf_2.npy"
     nnmf_file = output_dir + "/" + nnmf_file
@@ -237,11 +195,9 @@ def plot_results(data, output_dir, view_init_kwargs=None):
     psd = load(f"{spectra_dir}/psd.npy")
 
     young_neighbours = _get_nearest_neighbours(
-        subject_embeddings, young_centroid, n_neighbours=20
+        embeddings, young_centroid, n_neighbours=20
     )
-    old_neighbours = _get_nearest_neighbours(
-        subject_embeddings, old_centroid, n_neighbours=20
-    )
+    old_neighbours = _get_nearest_neighbours(embeddings, old_centroid, n_neighbours=20)
     cluster_gpsd = [
         np.average(psd[young_neighbours], axis=0),
         np.average(psd[old_neighbours], axis=0),
@@ -269,32 +225,37 @@ def plot_results(data, output_dir, view_init_kwargs=None):
     P_young = cluster_gpsd[0]
     P_old = cluster_gpsd[1]
     P_old_minus_young = P_old - P_young
-    P_max = np.max(P_old_minus_young)
-    P_min = np.min(P_old_minus_young)
-    sns.set_palette("viridis", n_colors=P_old_minus_young.shape[1])
+
+    P_mean = np.mean(P_old_minus_young, axis=1)
+    P_std = np.std(P_old_minus_young, axis=1)
     for j in range(P_old_minus_young.shape[0]):
         fig, ax = plotting.plot_line(
-            [f] * P_old_minus_young.shape[1],
-            P_old_minus_young[j],
+            [f],
+            [P_mean[j]],
+            errors=[[P_mean[j] + P_std[j]], [P_mean[j] - P_std[j]]],
             x_range=[0, 45],
-            y_range=[P_min, P_max],
-            y_label="PSD (a.u.)",
+            y_range=[-0.05, 0.05],
         )
-        ax.plot(f, np.mean(P_old_minus_young[j], axis=0), color="red")
         ax.axhline(0, color="black", linestyle="--")
         ax.set_xticklabels(ax.get_xticks(), fontsize=15)
+        ax.set_yticklabels(ax.get_yticks().round(2), fontsize=15)
         fig.savefig(f"{net_diff_dir}/psd_{j}.png", dpi=300)
         plt.close(fig)
 
 
 config = """
-    train_sehmm:
+    train_hive:
         config_kwargs:
             n_states: 8
             learn_means: False
             learn_covariances: True
-            subject_embeddings_dim: 3
+            embeddings_dim: 50
             learning_rate: 0.0025
+            n_epochs: 30
+            do_kl_annealing: True
+            kl_annealing_curve: tanh
+            kl_annealing_sharpness: 10
+            n_kl_annealing_epochs: 15
         init_kwargs:
             n_epochs: 1
             n_init: 10
@@ -304,8 +265,7 @@ config = """
             n_jobs: 16
         nnmf_components: 2
     plot_loss: {}
-    plot_results:
-        view_init_kwargs: {elev: 10, azim: 70}
+    plot_results: {}
     plot_alpha:
         kwargs: {n_samples: 2000}
     plot_group_nnmf_tde_hmm_networks:
@@ -318,8 +278,8 @@ config = """
 """
 
 # Set directories
-output_dir = f"results/run{id}"
-tmp_dir = f"tmp/run{id}"
+output_dir = f"results/hive/run{id}"
+tmp_dir = f"tmp/hive/run{id}"
 data_dir = "/well/woolrich/projects/camcan/winter23/src"
 
 training_data = load_data(data_dir, tmp_dir, n_jobs=16)
