@@ -155,7 +155,7 @@ def get_prior_dev(model):
     dev = dev_layer([dev_mag_mod, dev_map])
 
     # Get the prior session covs
-    covs_layer = model.get_layer("array_covs")
+    covs_layer = model.get_layer("session_covs")
     covs = np.squeeze(covs_layer([group_covs, dev]).numpy())
 
     prior_session_devs = covs - group_covs[None, ...]
@@ -203,7 +203,7 @@ hive_config = hive.Config(
     n_states=n_states,
     n_channels=n_channels,
     sequence_length=200,
-    n_arrays=n_sessions,
+    n_sessions=n_sessions,
     embeddings_dim=2,
     spatial_embeddings_dim=2,
     dev_n_layers=5,

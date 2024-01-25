@@ -82,15 +82,15 @@ def get_acc(hmm_model, hive_model, sim, training_data):
     hive_order = modes.match_modes(sim_alp, hive_alp, return_order=True)[1]
 
     # Get and order the covariances
-    sim_session_covs = sim.array_covariances
+    sim_session_covs = sim.session_covariances
     hmm_session_covs = hmm_model.dual_estimation(training_data)[1]
     hmm_session_covs = hmm_session_covs[:, hmm_order, :, :]
-    hive_session_covs = hive_model.get_array_means_covariances()[1]
+    hive_session_covs = hive_model.get_session_means_covariances()[1]
     hive_session_covs = hive_session_covs[:, hive_order, :, :]
 
     # Accuracy on session covariances
     n_states = hive_model.config.n_states
-    n_sessions = hive_model.config.n_arrays
+    n_sessions = hive_model.config.n_sessions
     hmm_acc = np.empty((n_sessions, n_states))
     hive_acc = np.empty((n_sessions, n_states))
     for i in range(n_sessions):
@@ -188,7 +188,7 @@ if train:
         hive_config = hive.Config(
             n_states=5,
             n_channels=40,
-            n_arrays=n_sessions,
+            n_sessions=n_sessions,
             embeddings_dim=2,
             spatial_embeddings_dim=2,
             sequence_length=200,
@@ -214,12 +214,12 @@ if train:
         sim = simulation.MArr_HMM_MVN(
             n_samples=3000,
             trans_prob="sequence",
-            array_means="zero",
-            array_covariances="random",
+            session_means="zero",
+            session_covariances="random",
             n_states=5,
             n_channels=40,
             n_covariances_act=5,
-            n_arrays=n_sessions,
+            n_sessions=n_sessions,
             embeddings_dim=2,
             spatial_embeddings_dim=2,
             embeddings_scale=0.005,

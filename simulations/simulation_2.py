@@ -41,7 +41,7 @@ hmm_config = hmm.Config(
 hive_config = hive.Config(
     n_states=5,
     n_channels=40,
-    n_arrays=100,
+    n_sessions=100,
     embeddings_dim=2,
     spatial_embeddings_dim=2,
     sequence_length=200,
@@ -69,12 +69,12 @@ print("Simulating data")
 sim = simulation.MArr_HMM_MVN(
     n_samples=3000,
     trans_prob="sequence",
-    array_means="zero",
-    array_covariances="random",
+    session_means="zero",
+    session_covariances="random",
     n_states=hive_config.n_states,
     n_channels=hive_config.n_channels,
     n_covariances_act=5,
-    n_arrays=hive_config.n_arrays,
+    n_sessions=hive_config.n_sessions,
     embeddings_dim=2,
     spatial_embeddings_dim=2,
     embeddings_scale=0.002,
@@ -168,10 +168,10 @@ hmm_alp = hmm_alp[:, hmm_order]
 hive_alp = hive_alp[:, hive_order]
 
 # Get and order the session covariances
-sim_session_covs = sim.array_covariances
+sim_session_covs = sim.session_covariances
 
 hmm_session_covs = hmm_session_covs[:, hmm_order, :, :]
-hive_session_covs = hive_model.get_array_means_covariances()[1]
+hive_session_covs = hive_model.get_session_means_covariances()[1]
 hive_session_covs = hive_session_covs[:, hive_order, :, :]
 
 # Plot the simulated and inferred session embeddings
@@ -192,7 +192,7 @@ for i in range(sim.n_groups):
         label=f"Group {i + 1}",
         s=80,
     )
-for i in range(sim.n_arrays):
+for i in range(sim.n_sessions):
     ax.annotate(
         str(i + 1),
         (sim_se[i, 0], sim_se[i, 1]),
@@ -216,7 +216,7 @@ for i in range(sim.n_groups):
         label=f"Group {i + 1}",
         s=80,
     )
-for i in range(sim.n_arrays):
+for i in range(sim.n_sessions):
     ax.annotate(
         str(i + 1),
         (inf_se[i, 0], inf_se[i, 1]),
@@ -248,9 +248,9 @@ fig.savefig(f"{figures_dir}/stc.png", dpi=300)
 plt.close(fig)
 
 # Pairwise cosine distances
-sim_pw_cos = np.empty((sim.n_states, sim.n_arrays, sim.n_arrays))
-hmm_pw_cos = np.empty((sim.n_states, sim.n_arrays, sim.n_arrays))
-hive_pw_cos = np.empty((sim.n_states, sim.n_arrays, sim.n_arrays))
+sim_pw_cos = np.empty((sim.n_states, sim.n_sessions, sim.n_sessions))
+hmm_pw_cos = np.empty((sim.n_states, sim.n_sessions, sim.n_sessions))
+hive_pw_cos = np.empty((sim.n_states, sim.n_sessions, sim.n_sessions))
 for j in range(sim.n_states):
     sim_pw_cos[j] = 1 - metrics.pairwise_congruence_coefficient(sim_session_covs[:, j])
     hmm_pw_cos[j] = 1 - metrics.pairwise_congruence_coefficient(hmm_session_covs[:, j])
@@ -259,7 +259,7 @@ for j in range(sim.n_states):
     )
 
 # Linear regression on pairwise cosine distances
-m, n = np.tril_indices(sim.n_arrays, k=-1)
+m, n = np.tril_indices(sim.n_sessions, k=-1)
 lr_hmm = LinearRegression().fit(
     sim_pw_cos[:, m, n].reshape(-1, 1),
     hmm_pw_cos[:, m, n].flatten(),
