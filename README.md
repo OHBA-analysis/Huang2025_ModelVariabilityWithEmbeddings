@@ -1,6 +1,6 @@
-# Huang2023_ModelVariabilityWithSubjectEmbeddings
-This repository consists of scripts for reproducing results in the "Modelling variability in dynamic functional
-brain networks using embeddings" manuscript.
+# Huang2024_ModelVariabilityWithEmbeddings
+This repository consists of scripts for reproducing results in the "Modelling variability in dynamic functional brain
+networks using embeddings" manuscript.
 
 ## Requirements
 - Scripts for preprocessing data depends on the [osl](https://github.com/OHBA-analysis/osl) toolbox. 
