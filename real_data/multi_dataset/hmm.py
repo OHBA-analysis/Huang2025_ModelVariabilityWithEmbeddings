@@ -174,5 +174,4 @@ run_pipeline(
     config,
     output_dir=output_dir,
     data=training_data,
-    extra_funcs=[plot_loss],
 )

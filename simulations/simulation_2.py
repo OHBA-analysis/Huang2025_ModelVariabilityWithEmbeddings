@@ -4,11 +4,12 @@ import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 from osl_dynamics import data, simulation
 from osl_dynamics.inference import tf_ops, metrics, modes
 from osl_dynamics.models import hmm, hive
-from osl_dynamics.utils import plotting
+from osl_dynamics.utils import plotting, set_random_seed
 
 
 train_hmm = True
@@ -24,6 +25,7 @@ os.makedirs(figures_dir, exist_ok=True)
 
 # GPU settings
 tf_ops.gpu_growth()
+set_random_seed(0)
 
 # Model configurations
 hmm_config = hmm.Config(
@@ -42,7 +44,7 @@ hive_config = hive.Config(
     n_states=5,
     n_channels=40,
     n_sessions=100,
-    embeddings_dim=2,
+    embeddings_dim=10,
     spatial_embeddings_dim=2,
     sequence_length=200,
     learn_means=False,
@@ -66,14 +68,14 @@ hive_config = hive.Config(
 
 # Simulate data
 print("Simulating data")
-sim = simulation.MArr_HMM_MVN(
+sim = simulation.MSess_HMM_MVN(
     n_samples=3000,
     trans_prob="sequence",
     session_means="zero",
     session_covariances="random",
     n_states=hive_config.n_states,
     n_channels=hive_config.n_channels,
-    n_covariances_act=5,
+    n_covariances_act=3,
     n_sessions=hive_config.n_sessions,
     embeddings_dim=2,
     spatial_embeddings_dim=2,
@@ -81,12 +83,12 @@ sim = simulation.MArr_HMM_MVN(
     n_groups=3,
     between_group_scale=0.2,
     stay_prob=0.9,
-    random_seed=1234,
     observation_error=0.2,
 )
 sim.standardize()
-training_data = data.Data(
-    [mtc for mtc in sim.time_series], use_tfrecord=True, buffer_size=2000
+training_data = data.Data([mtc for mtc in sim.time_series])
+training_data.add_session_labels(
+    "session_id", np.arange(hive_config.n_sessions), "categorical"
 )
 
 # Build and train models
@@ -96,10 +98,10 @@ if train_hmm:
     print("Training HMM")
     # Initialisation
     hmm_model.random_state_time_course_initialization(
-        training_data, n_init=5, n_epochs=3, take=1
+        training_data, n_init=5, n_epochs=3, take=1, use_tqdm=True
     )
     # Full training
-    hmm_history = hmm_model.fit(training_data)
+    hmm_history = hmm_model.fit(training_data, use_tqdm=True)
 
     pickle.dump(hmm_history, open(f"{model_dir}/hmm_history.pkl", "wb"))
     hmm_model.save(f"{model_dir}/hmm")
@@ -122,9 +124,10 @@ if train_hive:
         n_init=10,
         n_epochs=5,
         take=1,
+        use_tqdm=True,
     )
     # Full training
-    hive_history = hive_model.fit(training_data)
+    hive_history = hive_model.fit(training_data, use_tqdm=True)
 
     pickle.dump(hive_history, open(f"{model_dir}/hive_history.pkl", "wb"))
     hive_model.save(f"{model_dir}/hive")
@@ -142,14 +145,14 @@ else:
     with open(f"{model_dir}/hmm_session_covs.pkl", "rb") as file:
         hmm_session_covs = pickle.load(file)
 
-# Plot the training histories
 plotting.plot_line(
     [range(hmm_config.n_epochs), range(hive_config.n_epochs)],
     [hmm_history["loss"], hive_history["loss"]],
     labels=["HMM", "HIVE"],
     x_label="Epoch",
     y_label="Loss",
-    filename=f"{figures_dir}/loss.png",
+    title="Training loss",
+    filename=f"{figures_dir}/training_loss.png",
 )
 
 # Get the free energy
@@ -176,10 +179,17 @@ hive_session_covs = hive_session_covs[:, hive_order, :, :]
 
 # Plot the simulated and inferred session embeddings
 sim_se = sim.embeddings
-inf_se = hive_model.get_embeddings()
-inf_se -= np.mean(inf_se, axis=0)
-inf_se /= np.std(inf_se, axis=0)
+inf_se = hive_model.get_summed_embeddings()
+inf_se = LinearDiscriminantAnalysis(n_components=2).fit_transform(
+    inf_se, sim.assigned_groups
+)
 group_masks = [sim.assigned_groups == i for i in range(sim.n_groups)]
+
+print("Free energy")
+print(f"HMM: {hmm_free_energy:.2f}")
+print(f"HIVE: {hive_free_energy:.2f}")
+print(f"HMM DICE: {metrics.dice_coefficient(sim_alp, hmm_alp):.2f}")
+print(f"HIVE DICE: {metrics.dice_coefficient(sim_alp, hive_alp):.2f}")
 
 markers = ["o", "x", "v"]
 fig, ax = plotting.create_figure(figsize=(8, 6))
@@ -203,8 +213,7 @@ ax.set_xlabel("Dimension 1", fontsize=16)
 ax.set_ylabel("Dimension 2", fontsize=16)
 ax.set_title("Simulated session embedding vectors", fontsize=20)
 fig.tight_layout()
-fig.savefig(f"{figures_dir}/sim_se.png", dpi=300)
-plt.close(fig)
+fig.savefig(f"{figures_dir}/simulated_session_embeddings.png")
 
 fig, ax = plotting.create_figure(figsize=(8, 6))
 for i in range(sim.n_groups):
@@ -227,9 +236,7 @@ ax.set_xlabel("Dimension 1", fontsize=16)
 ax.set_ylabel("Dimension 2", fontsize=16)
 ax.set_title("Inferred session embedding vectors", fontsize=20)
 fig.tight_layout()
-fig.savefig(f"{figures_dir}/inf_se.png", dpi=300)
-plt.close(fig)
-
+fig.savefig(f"{figures_dir}/inferred_session_embeddings.png")
 
 # Plot the mode time courses
 fig, ax = plotting.plot_alpha(
@@ -244,8 +251,8 @@ ax[1].set_ylabel("HMM-DE", fontsize=16)
 ax[2].set_ylabel("HIVE", fontsize=16)
 ax[0].set_title("First 1000 samples of session 1", fontsize=20)
 ax[2].set_xlabel("Sample", fontsize=16)
-fig.savefig(f"{figures_dir}/stc.png", dpi=300)
-plt.close(fig)
+fig.tight_layout()
+fig.savefig(f"{figures_dir}/state_time_courses.png")
 
 # Pairwise cosine distances
 sim_pw_cos = np.empty((sim.n_states, sim.n_sessions, sim.n_sessions))
@@ -293,9 +300,7 @@ ax.set_xlabel("Simulated pairwise cosine distance", fontsize=16)
 ax.set_ylabel("Inferred pairwise cosine distance", fontsize=16)
 ax.set_title("HMM-DE " + r"$r^2 = $" + f"{r2_hmm:.2f}", fontsize=20)
 fig.tight_layout()
-fig.savefig(f"{figures_dir}/pw_cos_hmm.png", dpi=300)
-plt.close(fig)
-sns.reset_defaults()
+fig.savefig(f"{figures_dir}/pairwise_cosine_distances_hmm.png")
 
 fig, ax = plotting.create_figure(figsize=(8, 6))
 sns.set_palette("colorblind", n_colors=sim.n_states)
@@ -312,15 +317,4 @@ ax.set_xlabel("Simulated pairwise cosine distance", fontsize=16)
 ax.set_ylabel("Inferred pairwise cosine distance", fontsize=16)
 ax.set_title("HIVE " + r"$r^2 = $" + f"{r2_hive:.2f}", fontsize=20)
 fig.tight_layout()
-fig.savefig(f"{figures_dir}/pw_cos_hive.png", dpi=300)
-plt.close(fig)
-sns.reset_defaults()
-
-print("Free energy")
-print(f"HMM: {hmm_free_energy:.2f}")
-print(f"HIVE: {hive_free_energy:.2f}")
-print(f"HMM DICE: {metrics.dice_coefficient(sim_alp, hmm_alp):.2f}")
-print(f"HIVE DICE: {metrics.dice_coefficient(sim_alp, hive_alp):.2f}")
-
-# Clean up
-training_data.delete_dir()
+fig.savefig(f"{figures_dir}/pairwise_cosine_distances_hive.png")

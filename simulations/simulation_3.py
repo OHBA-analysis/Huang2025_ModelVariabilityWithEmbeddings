@@ -10,6 +10,7 @@ import seaborn as sns
 from osl_dynamics import simulation, data
 from osl_dynamics.inference import metrics, modes, tf_ops
 from osl_dynamics.models import hmm, hive
+from osl_dynamics.utils import set_random_seed
 
 # GPU settings
 tf_ops.gpu_growth()
@@ -154,8 +155,8 @@ def plot_results(hmm_dict, hive_dict, plot_dir):
     ax.tick_params(labelsize=15)
     ax.legend()
     sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
-    # save figure
-    plt.savefig(f"{plot_dir}/acc_increase_with_nsessions.png", dpi=300)
+    plt.tight_layout()
+    plt.savefig(f"{plot_dir}/session_covs_acc.png")
 
 
 train = True
@@ -168,6 +169,7 @@ figures_dir = "figures/acc_increase_with_nsessions"
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs(figures_dir, exist_ok=True)
 
+set_random_seed(0)
 if train:
     hmm_dict = defaultdict(list)
     hive_dict = defaultdict(list)
@@ -189,7 +191,7 @@ if train:
             n_states=5,
             n_channels=40,
             n_sessions=n_sessions,
-            embeddings_dim=2,
+            embeddings_dim=10,
             spatial_embeddings_dim=2,
             sequence_length=200,
             learn_means=False,
@@ -199,7 +201,7 @@ if train:
             dev_activation="tanh",
             dev_normalization="layer",
             dev_regularizer="l1",
-            dev_regularizer_factor=10,
+            dev_regularizer_factor=0.1,
             batch_size=64,
             learning_rate=0.005,
             lr_decay=0.05,
@@ -211,7 +213,7 @@ if train:
         )
 
         # Simulate data
-        sim = simulation.MArr_HMM_MVN(
+        sim = simulation.MSess_HMM_MVN(
             n_samples=3000,
             trans_prob="sequence",
             session_means="zero",
@@ -226,10 +228,12 @@ if train:
             n_groups=3,
             between_group_scale=0.5,
             stay_prob=0.9,
-            random_seed=1234,
         )
         sim.standardize()
         training_data = data.Data([mtc for mtc in sim.time_series])
+        training_data.add_session_labels(
+            "session_id", np.arange(n_sessions), "categorical"
+        )
 
         # Train both models on the same data for 10 times
         for i in range(10):
@@ -248,6 +252,3 @@ else:
 
 # Plot the results
 plot_results(hmm_dict, hive_dict, figures_dir)
-
-# Clean up
-training_data.delete_dir()

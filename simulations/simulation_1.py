@@ -2,16 +2,19 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
 import pickle
 
 from osl_dynamics import data, simulation, array_ops
 from osl_dynamics.inference import metrics, modes, tf_ops
 from osl_dynamics.models import hmm, hive, obs_mod
-from osl_dynamics.utils import plotting
+from osl_dynamics.utils import plotting, set_random_seed
 
 # GPU settings
 tf_ops.gpu_growth()
+set_random_seed(123)
+
+
+set_random_seed(123)
 
 
 # Helper functions
@@ -71,7 +74,6 @@ def simulate_data(
         covariances="random",
         n_modes=n_states,
         n_channels=n_channels,
-        random_seed=123,
     )
     group_covs = obs_model.covariances
     group_corrs = array_ops.cov2corr(group_covs)
@@ -110,7 +112,6 @@ def simulate_data(
             stay_prob=0.9,
             means="zero",
             covariances=sim_covs,
-            random_seed=123 + i,
         )
         sim.standardize()
         sim_session_covs.append(sim.covariances)
@@ -142,10 +143,12 @@ def get_prior_dev(model):
     group_covs = model.get_group_covariances()
 
     # Get the normalised deviation map
-    dev_map = obs_mod.get_dev_map(model.model, "covs")
+    dev_map = obs_mod.get_dev_map(model.model, "covs", model.config.session_labels)
 
     # Get the deviation magnitude
-    concat_embeddings = obs_mod.get_concatenated_embeddings(model.model, "covs")
+    concat_embeddings = obs_mod.get_concatenated_embeddings(
+        model.model, "covs", model.config.session_labels
+    )
     covs_dev_decoder_layer = model.get_layer("covs_dev_decoder")
     dev_mag_mod_layer = model.get_layer("covs_dev_mag_mod_beta")
     dev_mag_mod = 1 / dev_mag_mod_layer(covs_dev_decoder_layer(concat_embeddings))
@@ -163,7 +166,8 @@ def get_prior_dev(model):
 
 
 # Set parameters
-train = True
+train_hmm = True
+train_hive = True
 n_states = 5
 n_channels = 11
 n_samples = 25600
@@ -185,6 +189,7 @@ time_series, sim_session_covs, stc, sim_group_covs = simulate_data(
 )
 # Build osl-dynamics data object
 training_data = data.Data(time_series)
+training_data.add_session_labels("session_id", np.arange(n_sessions), "categorical")
 stc = np.concatenate(stc)
 
 # Model settings
@@ -224,18 +229,22 @@ hive_config = hive.Config(
     n_kl_annealing_epochs=20,
 )
 
-if train:
+if train_hmm:
     # Build and train HMM model
     hmm_model = hmm.Model(hmm_config)
     hmm_model.summary()
     hmm_model.set_regularizers(training_data)
     hmm_model.random_state_time_course_initialization(
-        training_data, n_epochs=5, n_init=10, take=1
+        training_data, n_epochs=5, n_init=10, take=1, use_tqdm=True
     )
-    hmm_history = hmm_model.fit(training_data)
+    hmm_history = hmm_model.fit(training_data, use_tqdm=True)
     hmm_model.save(f"{model_dir}/hmm")
     pickle.dump(hmm_history, open(f"{model_dir}/hmm/history.pkl", "wb"))
+else:
+    hmm_model = hmm.Model.load(f"{model_dir}/hmm")
+    hmm_history = pickle.load(open(f"{model_dir}/hmm/history.pkl", "rb"))
 
+if train_hive:
     # Build HIVE model
     hive_model = hive.Model(hive_config)
     hive_model.summary()
@@ -248,17 +257,15 @@ if train:
 
     # Initialisation
     hive_model.random_state_time_course_initialization(
-        training_data, n_epochs=5, n_init=10, take=1
+        training_data, n_epochs=5, n_init=10, take=1, use_tqdm=True
     )
 
     # Train model
-    hive_history = hive_model.fit(training_data)
+    hive_history = hive_model.fit(training_data, use_tqdm=True)
 
     hive_model.save(f"{model_dir}/hive")
     pickle.dump(hive_history, open(f"{model_dir}/hive/history.pkl", "wb"))
 else:
-    hmm_model = hmm.Model.load(f"{model_dir}/hmm")
-    hmm_history = pickle.load(open(f"{model_dir}/hmm/history.pkl", "rb"))
     hive_model = hive.Model.load(f"{model_dir}/hive")
     hive_history = pickle.load(open(f"{model_dir}/hive/history.pkl", "rb"))
 
@@ -278,21 +285,19 @@ plotting.plot_line(
     x_label="Epoch",
     y_label="Loss",
     title="Training history",
-    filename=f"{figures_dir}/loss.png",
+    filename=f"{figures_dir}/hive_training_history.png",
 )
 
 # Plot session embeddings
-session_embeddings = hive_model.get_embeddings()
-session_embeddings -= np.mean(session_embeddings, axis=0)
-session_embeddings /= np.std(session_embeddings, axis=0)
+session_embeddings = hive_model.get_summed_embeddings()
 
 fig, ax = plotting.plot_scatter(
     [session_embeddings[:, 0]],
     [session_embeddings[:, 1]],
     annotate=[[1, 2] + [""] * (n_sessions - 2)],
     title="Session embeddings",
+    filename=f"{figures_dir}/session_embeddings.png",
 )
-fig.savefig(f"{figures_dir}/session_embeddings.png", dpi=300)
 
 # Plot simulated and inferred group covariances
 hive_inf_group_covs = hive_model.get_group_covariances()[hive_order]
@@ -317,7 +322,9 @@ fig.tight_layout()
 fig.subplots_adjust(right=0.8)
 color_bar_axis = fig.add_axes([0.85, 0.15, 0.05, 0.7])
 fig.colorbar(im, cax=color_bar_axis)
-fig.savefig(f"{figures_dir}/group_covs.png", dpi=300)
+fig.suptitle("Group covariances", fontsize=20)
+fig.savefig(f"{figures_dir}/group_covariances.png")
+
 
 # Get the prior deviation
 prior_session_devs = get_prior_dev(hive_model)[:, hive_order]
@@ -340,8 +347,5 @@ fig.tight_layout()
 fig.subplots_adjust(right=0.8)
 color_bar_axis = fig.add_axes([0.85, 0.15, 0.05, 0.7])
 fig.colorbar(im, cax=color_bar_axis)
-fig.savefig(f"{figures_dir}/devs.png", dpi=300)
-plt.close(fig)
-
-# Clean up directory
-training_data.delete_dir()
+fig.suptitle("Session deviations", fontsize=20)
+fig.savefig(f"{figures_dir}/session_deviations.png")

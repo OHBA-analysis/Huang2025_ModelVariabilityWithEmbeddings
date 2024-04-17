@@ -3,4 +3,6 @@
 
 ```hmm.py```: This script is for training HMM and performing dual estimation on the combined dataset.
 
-```clustering_analysis```: This script is for performing the clustering analysis on both trained HMM and HIVE.
+```analyse_and_plot.py```: This script is for performing post-hoc analysis and plotting the results.
+
+```submit.py```: This script is for submitting jobs to the BMRC cluster.
