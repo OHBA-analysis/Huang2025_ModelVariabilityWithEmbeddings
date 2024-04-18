@@ -14,9 +14,6 @@ tf_ops.gpu_growth()
 set_random_seed(123)
 
 
-set_random_seed(123)
-
-
 # Helper functions
 def simulate_data(
     n_states,
