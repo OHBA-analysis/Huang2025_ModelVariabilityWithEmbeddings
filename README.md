@@ -1,9 +1,9 @@
-# Huang2024_ModelVariabilityWithEmbeddings
+# Huang2025_ModelVariabilityWithEmbeddings
 This repository consists of scripts for reproducing results in the "Modelling variability in dynamic functional brain
 networks using embeddings" manuscript.
 
 ## Requirements
-- Scripts for preprocessing data depends on the [osl](https://github.com/OHBA-analysis/osl) toolbox. 
+- Scripts for preprocessing data depends on the [osl-ephys](https://github.com/OHBA-analysis/osl-ephys) toolbox. 
 - Scripts for training models and analysing results depends on the [osl-dynamics](https://osl-dynamics.readthedocs.io) toolbox, which includes source code for the HIVE model, as well as analysis tools.
 
 ## Contents
