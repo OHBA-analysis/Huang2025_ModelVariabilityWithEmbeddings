@@ -136,27 +136,8 @@ def get_prior_dev(model):
         Prior session deviations.
         Shape is (n_sessions, n_states, n_channels, n_channels).
     """
-    # Get the group covs
     group_covs = model.get_group_covariances()
-
-    # Get the normalised deviation map
-    dev_map = obs_mod.get_dev_map(model.model, "covs", model.config.session_labels)
-
-    # Get the deviation magnitude
-    concat_embeddings = obs_mod.get_concatenated_embeddings(
-        model.model, "covs", model.config.session_labels
-    )
-    covs_dev_decoder_layer = model.get_layer("covs_dev_decoder")
-    dev_mag_mod_layer = model.get_layer("covs_dev_mag_mod_beta")
-    dev_mag_mod = 1 / dev_mag_mod_layer(covs_dev_decoder_layer(concat_embeddings))
-
-    # Get the prior deviation
-    dev_layer = model.get_layer("covs_dev")
-    dev = dev_layer([dev_mag_mod, dev_map])
-
-    # Get the prior session covs
-    covs_layer = model.get_layer("session_covs")
-    covs = np.squeeze(covs_layer([group_covs, dev]).numpy())
+    covs = obs_mod.generate_covariances(model, model.config.session_labels)
 
     prior_session_devs = covs - group_covs[None, ...]
     return prior_session_devs
@@ -288,7 +269,7 @@ plotting.plot_line(
 # Plot session embeddings
 session_embeddings = hive_model.get_summed_embeddings()
 
-fig, ax = plotting.plot_scatter(
+plotting.plot_scatter(
     [session_embeddings[:, 0]],
     [session_embeddings[:, 1]],
     annotate=[[1, 2] + [""] * (n_sessions - 2)],

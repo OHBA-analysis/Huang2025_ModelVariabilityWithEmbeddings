@@ -17,7 +17,6 @@ from osl_dynamics.data import Data
 from osl_dynamics.inference import tf_ops
 from osl_dynamics.utils import plotting
 
-tf_ops.select_gpu(1)
 tf_ops.gpu_growth()
 
 

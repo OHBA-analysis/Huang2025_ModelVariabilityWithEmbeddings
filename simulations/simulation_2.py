@@ -155,10 +155,6 @@ plotting.plot_line(
     filename=f"{figures_dir}/training_loss.png",
 )
 
-# Get the free energy
-hmm_free_energy = hmm_model.free_energy(training_data)
-hive_free_energy = hive_model.free_energy(training_data)
-
 # Get and order the mode time courses
 sim_alp = np.concatenate(sim.mode_time_course)
 hmm_alp = hmm_model.get_alpha(training_data, concatenate=True)
@@ -185,9 +181,6 @@ inf_se = LinearDiscriminantAnalysis(n_components=2).fit_transform(
 )
 group_masks = [sim.assigned_groups == i for i in range(sim.n_groups)]
 
-print("Free energy")
-print(f"HMM: {hmm_free_energy:.2f}")
-print(f"HIVE: {hive_free_energy:.2f}")
 print(f"HMM DICE: {metrics.dice_coefficient(sim_alp, hmm_alp):.2f}")
 print(f"HIVE DICE: {metrics.dice_coefficient(sim_alp, hive_alp):.2f}")
 
